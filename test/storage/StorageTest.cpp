@@ -71,7 +71,7 @@ TEST(StorageTest, BigTest) {
     for (long i = 99999; i >= 0; --i) {
         auto key = pad_space("Key " + std::to_string(i), length);
         auto val = pad_space("Val " + std::to_string(i), length);
-
+		
         std::string res;
         EXPECT_TRUE(storage.Get(key, res));
 
@@ -94,7 +94,7 @@ TEST(StorageTest, MaxTest) {
     for (long i = 100; i < 1100; ++i) {
         auto key = pad_space("Key " + std::to_string(i), length);
         auto val = pad_space("Val " + std::to_string(i), length);
-
+        
         std::string res;
         EXPECT_TRUE(storage.Get(key, res));
 
@@ -103,7 +103,7 @@ TEST(StorageTest, MaxTest) {
 
     for (long i = 0; i < 100; ++i) {
         auto key = pad_space("Key " + std::to_string(i), length);
-
+        
         std::string res;
         EXPECT_FALSE(storage.Get(key, res));
     }

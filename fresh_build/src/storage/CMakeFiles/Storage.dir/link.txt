@@ -1,0 +1,2 @@
+ccache /usr/bin/ar qc libStorage.a  CMakeFiles/Storage.dir/SimpleLRU.cpp.o
+ccache /usr/bin/ranlib libStorage.a

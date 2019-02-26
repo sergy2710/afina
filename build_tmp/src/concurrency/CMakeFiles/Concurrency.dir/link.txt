@@ -1,0 +1,2 @@
+ccache /usr/bin/ar qc libConcurrency.a  CMakeFiles/Concurrency.dir/Executor.cpp.o
+ccache /usr/bin/ranlib libConcurrency.a

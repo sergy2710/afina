@@ -1,0 +1,2 @@
+ccache /usr/bin/ar qc libLogging.a  CMakeFiles/Logging.dir/ServiceImpl.cpp.o
+ccache /usr/bin/ranlib libLogging.a

@@ -1,0 +1,28 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../include/afina/Storage.h
+string
+-
+
+/home/sergy/2 sem/c++/afina/src/storage/SimpleLRU.cpp
+SimpleLRU.h
+/home/sergy/2 sem/c++/afina/src/storage/SimpleLRU.h
+
+/home/sergy/2 sem/c++/afina/src/storage/SimpleLRU.h
+map
+-
+memory
+-
+mutex
+-
+string
+-
+afina/Storage.h
+-
+
