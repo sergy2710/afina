@@ -67,7 +67,7 @@ TEST(StorageTest, BigTest) {
         auto val = pad_space("Val " + std::to_string(i), length);
         storage.Put(key, val);
     }
-
+	
     for (long i = 99999; i >= 0; --i) {
         auto key = pad_space("Key " + std::to_string(i), length);
         auto val = pad_space("Val " + std::to_string(i), length);

@@ -1,1 +1,0 @@
-ccache /usr/bin/c++  -Wall  -std=c++11 -march=native -g  -rdynamic CMakeFiles/catch_tests.dir/errors.cpp.o CMakeFiles/catch_tests.dir/file_helper.cpp.o CMakeFiles/catch_tests.dir/file_log.cpp.o CMakeFiles/catch_tests.dir/format.cpp.o CMakeFiles/catch_tests.dir/main.cpp.o CMakeFiles/catch_tests.dir/registry.cpp.o CMakeFiles/catch_tests.dir/utils.cpp.o  -o catch_tests -lpthread 

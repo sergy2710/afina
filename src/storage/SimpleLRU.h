@@ -21,11 +21,15 @@ public:
 
     ~SimpleLRU() {
         _lru_index.clear();
-        _lru_head = NULL;
-        _lru_tail = NULL;
-        _current_size = 0;
-        _empty_size = _max_size;
-        //_lru_head.reset(); // TODO: Here is stack overflow
+        
+        while (_lru_head->next != nullptr)
+        {
+            std::unique_ptr<lru_node> tmp_node{new lru_node()};
+            tmp_node.swap(_lru_head->next);
+            _lru_head->next.swap(tmp_node->next);
+            tmp_node.reset();
+        }
+        _lru_head.reset();
     }
 
     // Implements Afina::Storage interface
@@ -49,10 +53,11 @@ private:
         const std::string key;
         std::string value;
         lru_node* prev;
-        lru_node* next;
+        std::unique_ptr<lru_node> next;
 
-        lru_node(const std::string key, std::string value, lru_node* prev, lru_node* next) \
-         : key(key), value(value), prev(prev), next(next){};
+        lru_node(const std::string key = "", std::string value = "",
+                lru_node* prev = nullptr, lru_node* next = nullptr)
+                : key(key), value(value), prev(prev), next(next){};
     };
 
     // Maximum number of bytes could be stored in this cache.
@@ -65,23 +70,20 @@ private:
     // element that wasn't used for longest time.
     //
     // List owns all nodes
-    lru_node* _lru_head = NULL;
-    lru_node* _lru_tail = NULL; // quick access to tail;
+    std::unique_ptr<lru_node> _lru_head = nullptr;
+    lru_node* _lru_tail = nullptr; // quick access to tail;
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
     std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
 
-    // free some memory to insert new value
+    // clear memory for some data sizeof needed_size
     bool ClearMemory(const std::size_t needed_size);
 
-    // accurately recount size variables
+    // accurately recount size of _current_size and _empty_size
     bool RecountCurrentSize(const std::size_t increment);
 
     // delete node by key and insert new
     bool UpdateNode(const std::string &key, const std::string &value, const std::size_t increment);
-
-    //move node to tail of list
-    bool MoveToTail(lru_node* node);
 };
 
 } // namespace Backend

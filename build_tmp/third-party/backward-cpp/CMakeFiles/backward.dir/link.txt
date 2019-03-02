@@ -1,2 +1,0 @@
-ccache /usr/bin/ar qc libbackward.a  CMakeFiles/backward.dir/backward.cpp.o
-ccache /usr/bin/ranlib libbackward.a
