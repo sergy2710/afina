@@ -56,10 +56,11 @@ private:
     // Thread to run network on
     std::thread _thread;
 
+    std::condition_variable _server_stop;
+
     uint32_t _w_max;
     std::mutex _w_mutex;
     std::list<std::thread> _w_threads;
-    std::condition_variable _w_condvar;
     void Worker(int socket, std::list<std::thread>::iterator w_position);
 
 };

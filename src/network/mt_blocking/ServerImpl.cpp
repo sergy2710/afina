@@ -167,7 +167,7 @@ void ServerImpl::OnRun() {
 
     {
         std::unique_lock<std::mutex> lock(_w_mutex); // for condvar
-        if (!_w_threads.empty()) _w_condvar.wait(lock);
+        if (!_w_threads.empty()) _server_stop.wait(lock);
     }
 
     // Cleanup on exit...
@@ -192,7 +192,7 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
     try {
         int readed_bytes = -1;
         char client_buffer[4096];
-        while ((readed_bytes = read(client_socket, client_buffer, sizeof(client_buffer))) > 0) {
+        while ((readed_bytes = read(client_socket, client_buffer, sizeof(client_buffer))) > 0  && running.load()) {
             //_logger->debug("Got {} bytes from socket", readed_bytes);
             _logger->warn("Got {} bytes from socket", readed_bytes);
 
@@ -200,7 +200,7 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
             // for example:
             // - read#0: [<command1 start>]
             // - read#1: [<command1 end> <argument> <command2> <argument for command 2> <command3> ... ]
-            while (readed_bytes > 0 && running.load()) {
+            while (readed_bytes > 0) {
                 //_logger->debug("Process {} bytes", readed_bytes);
                 _logger->warn("Process {} bytes", readed_bytes);
                 // There is no command yet
@@ -286,7 +286,7 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
     _w_mutex.lock();
     thread_position->detach();
     _w_threads.erase(thread_position);
-    if (_w_threads.empty()) _w_condvar.notify_one();
+    if (_w_threads.empty()) _server_stop.notify_one();
     _w_mutex.unlock();
 }
 
