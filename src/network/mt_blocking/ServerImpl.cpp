@@ -200,7 +200,7 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
             // for example:
             // - read#0: [<command1 start>]
             // - read#1: [<command1 end> <argument> <command2> <argument for command 2> <command3> ... ]
-            while (readed_bytes > 0) {
+            while (readed_bytes > 0 && running.load()) {
                 //_logger->debug("Process {} bytes", readed_bytes);
                 _logger->warn("Process {} bytes", readed_bytes);
                 // There is no command yet
@@ -241,7 +241,7 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
                 }
 
                 // Thre is command & argument - RUN!
-                if (command_to_execute && arg_remains == 0 && running.load()) {
+                if (command_to_execute && arg_remains == 0) {
                     //_logger->debug("Start command execution");
                     _logger->warn("Start command execution");
 
