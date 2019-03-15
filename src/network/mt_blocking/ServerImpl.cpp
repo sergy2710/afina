@@ -42,8 +42,7 @@ ServerImpl::~ServerImpl() {}
 // See Server.h
 void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
     _logger = pLogging->select("network");
-    //_logger->info("Start mt_blocking network service");
-    _logger->warn("Start mt_blocking network service");
+    _logger->info("Start mt_blocking network service");
 
     _logger->warn("n_workers = {}", n_workers);
 
@@ -111,8 +110,7 @@ void ServerImpl::OnRun() {
     std::string argument_for_command;
     std::unique_ptr<Execute::Command> command_to_execute;*/
     while (running.load()) {
-        //_logger->debug("waiting for connection...");
-        _logger->warn("waiting for connection...");
+        _logger->debug("waiting for connection...");
 
         // The call to accept() blocks until the incoming connection arrives
         int client_socket;
@@ -123,7 +121,7 @@ void ServerImpl::OnRun() {
         }
 
         // Got new connection
-        //if (_logger->should_log(spdlog::level::debug))        
+        if (_logger->should_log(spdlog::level::debug))        
         {
             std::string host = "unknown", port = "-1";
 
@@ -133,8 +131,7 @@ void ServerImpl::OnRun() {
                 host = hbuf;
                 port = sbuf;
             }
-            //_logger->debug("Accepted connection on descriptor {} (host={}, port={})\n", client_socket, host, port);
-            _logger->warn("Accepted connection on descriptor {} (host={}, port={})\n", client_socket, host, port);
+            _logger->debug("Accepted connection on descriptor {} (host={}, port={})\n", client_socket, host, port);
         }
 
         // Configure read timeout
@@ -167,7 +164,7 @@ void ServerImpl::OnRun() {
 
     {
         std::unique_lock<std::mutex> lock(_w_mutex); // for condvar
-        if (!_w_threads.empty()) _server_stop.wait(lock);
+        while (!_w_threads.empty()) _server_stop.wait(lock);
     }
 
     // Cleanup on exit...
@@ -193,24 +190,23 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
         int readed_bytes = -1;
         char client_buffer[4096];
         while ((readed_bytes = read(client_socket, client_buffer, sizeof(client_buffer))) > 0  && running.load()) {
-            //_logger->debug("Got {} bytes from socket", readed_bytes);
-            _logger->warn("Got {} bytes from socket", readed_bytes);
-
+            if (! running.load()) _logger->debug("Sent {} info that we stopped", client_buffer); 
+            _logger->debug("Got {} bytes from socket", readed_bytes);
+            
             // Single block of data readed from the socket could trigger inside actions a multiple times,
             // for example:
             // - read#0: [<command1 start>]
             // - read#1: [<command1 end> <argument> <command2> <argument for command 2> <command3> ... ]
             while (readed_bytes > 0) {
-                //_logger->debug("Process {} bytes", readed_bytes);
-                _logger->warn("Process {} bytes", readed_bytes);
+                _logger->debug("Process {} bytes", readed_bytes);
+                
                 // There is no command yet
                 if (!command_to_execute) {
                     std::size_t parsed = 0;
                     if (parser.Parse(client_buffer, readed_bytes, parsed)) {
                         // There is no command to be launched, continue to parse input stream
                         // Here we are, current chunk finished some command, process it
-                        //_logger->debug("Found new command: {} in {} bytes", parser.Name(), parsed);
-                        _logger->warn("Found new command: {} in {} bytes", parser.Name(), parsed);
+                        _logger->debug("Found new command: {} in {} bytes", parser.Name(), parsed);
                         command_to_execute = parser.Build(arg_remains);
                         if (arg_remains > 0) {
                             arg_remains += 2;
@@ -229,8 +225,7 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
 
                 // There is command, but we still wait for argument to arrive...
                 if (command_to_execute && arg_remains > 0) {
-                    //_logger->debug("Fill argument: {} bytes of {}", readed_bytes, arg_remains);
-                    _logger->warn("Fill argument: {} bytes of {}", readed_bytes, arg_remains);
+                    _logger->debug("Fill argument: {} bytes of {}", readed_bytes, arg_remains);
                     // There is some parsed command, and now we are reading argument
                     std::size_t to_read = std::min(arg_remains, std::size_t(readed_bytes));
                     argument_for_command.append(client_buffer, to_read);
@@ -242,9 +237,8 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
 
                 // Thre is command & argument - RUN!
                 if (command_to_execute && arg_remains == 0) {
-                    //_logger->debug("Start command execution");
-                    _logger->warn("Start command execution");
-
+                    _logger->debug("Start command execution");
+                    
                     std::string result;
                     try{
                         command_to_execute->Execute(*pStorage, argument_for_command, result);
@@ -270,8 +264,7 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
         }
 
         if (readed_bytes == 0) {
-            //_logger->debug("Connection closed");
-            _logger->warn("Connection closed");
+            _logger->debug("Connection closed");
         } else {
             throw std::runtime_error(std::string(strerror(errno)));
         }
@@ -283,11 +276,13 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
     std::this_thread::sleep_for(std::chrono::microseconds(100));   //to avoid close before send issue
     close(client_socket);
 
-    _w_mutex.lock();
-    thread_position->detach();
-    _w_threads.erase(thread_position);
-    if (_w_threads.empty()) _server_stop.notify_one();
-    _w_mutex.unlock();
+    {
+        std::lock_guard<std::mutex> lock(_w_mutex);
+        thread_position->detach();
+        _w_threads.erase(thread_position);
+        if (_w_threads.empty()) _server_stop.notify_one();
+    }
+    
 }
 
 } // namespace MTblocking

@@ -15,6 +15,7 @@ namespace Backend {
  * # Map based implementation
  * That is NOT thread safe implementaiton!!
  */
+
 class SimpleLRU : public Afina::Storage {
 public:
     SimpleLRU(std::size_t max_size = 1024) : _max_size(max_size) {}
@@ -70,11 +71,14 @@ private:
     // element that wasn't used for longest time.
     //
     // List owns all nodes
-    std::unique_ptr<lru_node> _lru_head = nullptr;
-    lru_node* _lru_tail = nullptr; // quick access to tail;
+    std::unique_ptr<lru_node> _lru_head{new lru_node()};
+    lru_node* _lru_tail = _lru_head.get(); // quick access to tail;
+
+    typedef std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>,
+                                 std::less<std::string>> lru_map;
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
-    std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
+    lru_map _lru_index;
 
     // clear memory for some data sizeof needed_size
     bool ClearMemory(const std::size_t needed_size);
@@ -83,7 +87,10 @@ private:
     bool RecountCurrentSize(const std::size_t increment);
 
     // delete node by key and insert new
-    bool UpdateNode(const std::string &key, const std::string &value, const std::size_t increment);
+    bool UpdateNode(const std::string &key, const std::string &value, const lru_map::iterator elem_it);
+
+    // move node to tail
+    void MoveToTail(lru_node* found_node);
 };
 
 } // namespace Backend
