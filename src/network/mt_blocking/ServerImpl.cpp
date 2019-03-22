@@ -47,6 +47,7 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
     _logger->warn("n_workers = {}", n_workers);
 
     _w_max = n_workers;
+    _w_cur = 0;
     sigset_t sig_mask;
     sigemptyset(&sig_mask);
     sigaddset(&sig_mask, SIGPIPE);
@@ -121,8 +122,7 @@ void ServerImpl::OnRun() {
         }
 
         // Got new connection
-        if (_logger->should_log(spdlog::level::debug))        
-        {
+        if (_logger->should_log(spdlog::level::debug)) {
             std::string host = "unknown", port = "-1";
 
             char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
@@ -145,18 +145,17 @@ void ServerImpl::OnRun() {
         {
             {
                 std::lock_guard<std::mutex> lock(_w_mutex);
-                if (_w_threads.size() == _w_max)
-                {
+                if (_w_cur < _w_max) {
+                    _w_cur += 1;
+                    std::thread thr;
+                    thr = std::thread(&ServerImpl::Worker, this, client_socket);
+                    thr.detach();
+                } else {
                     static const std::string msg = "SERVER_ERROR No free workers\r\n";
                     send(client_socket, msg.data(), msg.size(), 0);
-                    std::this_thread::sleep_for(std::chrono::microseconds(100));   //to avoid close before send issue
+                    std::this_thread::sleep_for(std::chrono::microseconds(100)); // to avoid close before send issue
                     close(client_socket);
                     _logger->warn("Closed connection due to the absence of workers\n");
-                }
-                else
-                {
-                    _w_threads.emplace_back(std::thread()); // create new element in LIST
-                    _w_threads.back() = std::thread(&ServerImpl::Worker, this, client_socket, --(_w_threads.end()));
                 }
             }
         }
@@ -164,14 +163,15 @@ void ServerImpl::OnRun() {
 
     {
         std::unique_lock<std::mutex> lock(_w_mutex); // for condvar
-        while (!_w_threads.empty()) _server_stop.wait(lock);
+        while (_w_cur > 0)
+            _server_stop.wait(lock);
     }
 
     // Cleanup on exit...
     _logger->warn("Network stopped");
 }
 
-void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thread_position) {
+void ServerImpl::Worker(int client_socket) {
     // Here is connection state
     // - parser: parse state of the stream
     // - command_to_execute: last command parsed out of stream
@@ -181,7 +181,7 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
     Protocol::Parser parser;
     std::string argument_for_command;
     std::unique_ptr<Execute::Command> command_to_execute;
-    
+
     // Process new connection:
     // - read commands until socket alive
     // - execute each command
@@ -189,17 +189,18 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
     try {
         int readed_bytes = -1;
         char client_buffer[4096];
-        while ((readed_bytes = read(client_socket, client_buffer, sizeof(client_buffer))) > 0  && running.load()) {
-            if (! running.load()) _logger->debug("Sent {} info that we stopped", client_buffer); 
+        while ((running.load()) && ((readed_bytes = read(client_socket, client_buffer, sizeof(client_buffer))) > 0)) {
+            if (!running.load())
+                _logger->debug("Sent {} info that we stopped", client_buffer);
             _logger->debug("Got {} bytes from socket", readed_bytes);
-            
+
             // Single block of data readed from the socket could trigger inside actions a multiple times,
             // for example:
             // - read#0: [<command1 start>]
             // - read#1: [<command1 end> <argument> <command2> <argument for command 2> <command3> ... ]
             while (readed_bytes > 0) {
                 _logger->debug("Process {} bytes", readed_bytes);
-                
+
                 // There is no command yet
                 if (!command_to_execute) {
                     std::size_t parsed = 0;
@@ -238,9 +239,9 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
                 // Thre is command & argument - RUN!
                 if (command_to_execute && arg_remains == 0) {
                     _logger->debug("Start command execution");
-                    
+
                     std::string result;
-                    try{
+                    try {
                         command_to_execute->Execute(*pStorage, argument_for_command, result);
                         // Send response
                         result += "\r\n";
@@ -273,16 +274,15 @@ void ServerImpl::Worker(int client_socket, std::list<std::thread>::iterator thre
     }
 
     // We are done with this connection
-    std::this_thread::sleep_for(std::chrono::microseconds(100));   //to avoid close before send issue
+    std::this_thread::sleep_for(std::chrono::microseconds(100)); // to avoid close before send issue
     close(client_socket);
 
     {
         std::lock_guard<std::mutex> lock(_w_mutex);
-        thread_position->detach();
-        _w_threads.erase(thread_position);
-        if (_w_threads.empty()) _server_stop.notify_one();
+        _w_cur -= 1;
+        if (_w_cur == 0)
+            _server_stop.notify_one();
     }
-    
 }
 
 } // namespace MTblocking

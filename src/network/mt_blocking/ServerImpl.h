@@ -2,10 +2,9 @@
 #define AFINA_NETWORK_MT_BLOCKING_SERVER_H
 
 #include <atomic>
-#include <thread>
-#include <mutex>
-#include <list>
 #include <condition_variable>
+#include <mutex>
+#include <thread>
 
 #include <afina/network/Server.h>
 
@@ -59,10 +58,9 @@ private:
     std::condition_variable _server_stop;
 
     uint32_t _w_max;
+    uint32_t _w_cur;
     std::mutex _w_mutex;
-    std::list<std::thread> _w_threads;
-    void Worker(int socket, std::list<std::thread>::iterator w_position);
-
+    void Worker(int socket);
 };
 
 } // namespace MTblocking

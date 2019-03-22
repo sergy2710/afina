@@ -22,9 +22,8 @@ public:
 
     ~SimpleLRU() {
         _lru_index.clear();
-        
-        while (_lru_head->next != nullptr)
-        {
+
+        while (_lru_head->next != nullptr) {
             std::unique_ptr<lru_node> tmp_node{new lru_node()};
             tmp_node.swap(_lru_head->next);
             _lru_head->next.swap(tmp_node->next);
@@ -37,7 +36,7 @@ public:
     bool Put(const std::string &key, const std::string &value) override;
 
     // Implements Afina::Storage interface
-    bool PutIfAbsent(const std::string &key, const std::string &value) override; 
+    bool PutIfAbsent(const std::string &key, const std::string &value) override;
 
     // Implements Afina::Storage interface
     bool Set(const std::string &key, const std::string &value) override;
@@ -53,12 +52,11 @@ private:
     using lru_node = struct lru_node {
         const std::string key;
         std::string value;
-        lru_node* prev;
+        lru_node *prev;
         std::unique_ptr<lru_node> next;
 
-        lru_node(const std::string key = "", std::string value = "",
-                lru_node* prev = nullptr, lru_node* next = nullptr)
-                : key(key), value(value), prev(prev), next(next){};
+        lru_node(const std::string key = "", std::string value = "", lru_node *prev = nullptr, lru_node *next = nullptr)
+            : key(key), value(value), prev(prev), next(next){};
     };
 
     // Maximum number of bytes could be stored in this cache.
@@ -72,10 +70,11 @@ private:
     //
     // List owns all nodes
     std::unique_ptr<lru_node> _lru_head{new lru_node()};
-    lru_node* _lru_tail = _lru_head.get(); // quick access to tail;
+    lru_node *_lru_tail = _lru_head.get(); // quick access to tail;
 
     typedef std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>,
-                                 std::less<std::string>> lru_map;
+                     std::less<std::string>>
+        lru_map;
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
     lru_map _lru_index;
@@ -90,7 +89,7 @@ private:
     bool UpdateNode(const std::string &key, const std::string &value, const lru_map::iterator elem_it);
 
     // move node to tail
-    void MoveToTail(lru_node* found_node);
+    void MoveToTail(lru_node *found_node);
 };
 
 } // namespace Backend
