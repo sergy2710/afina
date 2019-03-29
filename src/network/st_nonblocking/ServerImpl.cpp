@@ -220,6 +220,8 @@ void ServerImpl::OnNewConnection(int epoll_descr) {
                 delete pc;
             }
         }
+
+        //delete pc; // need to rewrite isAline to remove error
     }
 }
 

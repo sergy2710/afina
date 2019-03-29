@@ -26,7 +26,6 @@
 
 #include "protocol/Parser.h"
 
-// TOASK: body_size - ?
 // 'TODO: make it configurable' - ?
 
 namespace Afina {
