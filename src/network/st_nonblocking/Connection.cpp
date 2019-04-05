@@ -36,52 +36,56 @@ namespace STnonblock {
 
 // See Connection.h
 void Connection::Start() {
-    // std::cout << "Start" << std::endl;
     _logger->info("Start on descriptor {}", _socket);
-    // initialize socket and _event - ?
     _live = true;
     _event.data.fd = _socket;
     _event.data.ptr = this;
     _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
+
+    readed_bytes = 0;
+    _write_offset = 0;
+    arg_remains = 0;
+    command_to_execute = nullptr;
+    parser = Protocol::Parser{};
+    argument_for_command.clear();
+    _write_buffers.clear();
 }
 
 // See Connection.h
 void Connection::OnError() {
-    // std::cout << "OnError" << std::endl;
     _logger->info("OnError on descriptor {}", _socket);
     _live = false;
+    shutdown(_socket, SHUT_RDWR);
     _logger->error("Error connection on descriptor {}", _socket);
-    std::string err_message = "Error has happened\r\n"; // TODO send some info about error ?
-    if (send(_socket, err_message.data(), err_message.size(), 0) <= 0) {
-        throw std::runtime_error("Failed to send response");
-    }
+    // std::string err_message = "Error has happened\r\n"; // TODO send some info about error ?
+    // send(_socket, err_message.data(), err_message.size(), 0)
 }
 
 // See Connection.h
 void Connection::OnClose() {
-    // std::cout << "OnClose" << std::endl;
     _logger->info("OnClose on descriptor {}", _socket);
     _live = false;
+    shutdown(_socket, SHUT_RDWR);
     _logger->debug("Closed connection on descriptor {}", _socket);
-    std::string err_message = "Connection is closed\r\n"; // TODO send some info why connection closed ?
-    if (send(_socket, err_message.data(), err_message.size(), 0) <= 0) {
-        throw std::runtime_error("Failed to send response");
-    }
+    // std::string close_message = "Connection is closed\r\n"; // TODO send some info why connection closed ?
+    // send(_socket, close_message.data(), close_message.size(), 0);
 }
 
 // See Connection.h
 void Connection::DoRead() {
-    // std::cout << "DoRead" << std::endl;
     _logger->info("DoRead on descriptor {}", _socket);
 
     _event.events |= EPOLLOUT;
+    _event.data.ptr = this;
 
     try {
-        int readed_bytes = -1;
+        int readed_bytes_ = -1;
 
-        while ((readed_bytes = read(_socket, _read_buffer, sizeof(_read_buffer))) > 0) {
+        while ((readed_bytes_ = read(_socket, _read_buffer + readed_bytes, sizeof(_read_buffer) - readed_bytes)) > 0) {
 
-            _logger->debug("Got {} bytes from socket", readed_bytes);
+            _logger->debug("Got {} bytes from socket", readed_bytes_);
+
+            readed_bytes += readed_bytes_;
 
             // Single block of data readed from the socket could trigger inside actions a multiple times,
             // for example:
@@ -129,6 +133,8 @@ void Connection::DoRead() {
                 if (command_to_execute && arg_remains == 0) {
                     _logger->debug("Start command execution");
 
+                    _logger->debug("arguments {}", argument_for_command);
+
                     std::string result;
                     try {
                         command_to_execute->Execute(*pStorage, argument_for_command, result);
@@ -163,7 +169,6 @@ void Connection::DoRead() {
 
 // See Connection.h
 void Connection::DoWrite() {
-    // std::cout << "DoWrite" << std::endl;
     _logger->info("DoWrite on descriptor {}\n", _socket);
 
     int available_space;
