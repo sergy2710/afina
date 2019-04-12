@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <set>
 
 #include <afina/network/Server.h>
 
@@ -51,6 +52,8 @@ private:
 
     // Server socket to accept connections on
     int _server_socket;
+
+    std::set<int> _client_sockets;
 
     // Thread to run network on
     std::thread _thread;

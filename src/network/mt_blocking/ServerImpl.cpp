@@ -4,10 +4,8 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <stdexcept>
-
-#include <chrono>
-#include <thread>
 
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -25,8 +23,6 @@
 #include <afina/logging/Service.h>
 
 #include "protocol/Parser.h"
-
-// 'TODO: make it configurable' - ?
 
 namespace Afina {
 namespace Network {
@@ -47,6 +43,7 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
 
     _w_max = n_workers;
     _w_cur = 0;
+    _client_sockets.clear();
     sigset_t sig_mask;
     sigemptyset(&sig_mask);
     sigaddset(&sig_mask, SIGPIPE);
@@ -89,6 +86,9 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
 void ServerImpl::Stop() {
     running.store(false);
     shutdown(_server_socket, SHUT_RDWR);
+    for (auto cl_socket : _client_sockets) {
+        shutdown(cl_socket, SHUT_RDWR);
+    }
 }
 
 // See Server.h
@@ -142,28 +142,27 @@ void ServerImpl::OnRun() {
         }
 
         {
-            {
-                std::lock_guard<std::mutex> lock(_w_mutex);
-                if (_w_cur < _w_max) {
-                    _w_cur += 1;
-                    std::thread thr;
-                    thr = std::thread(&ServerImpl::Worker, this, client_socket);
-                    thr.detach();
-                } else {
-                    static const std::string msg = "SERVER_ERROR No free workers\r\n";
-                    send(client_socket, msg.data(), msg.size(), 0);
-                    std::this_thread::sleep_for(std::chrono::microseconds(100)); // to avoid close before send issue
-                    close(client_socket);
-                    _logger->warn("Closed connection due to the absence of workers\n");
-                }
+            std::lock_guard<std::mutex> lock(_w_mutex);
+            if (_w_cur < _w_max) {
+                _w_cur += 1;
+                _client_sockets.insert(client_socket);
+                std::thread thr;
+                thr = std::thread(&ServerImpl::Worker, this, client_socket);
+                thr.detach();
+            } else {
+                static const std::string msg = "SERVER_ERROR No free workers\r\n";
+                send(client_socket, msg.data(), msg.size(), 0);
+                close(client_socket);
+                _logger->warn("Closed connection due to the absence of workers\n");
             }
         }
     }
 
     {
         std::unique_lock<std::mutex> lock(_w_mutex); // for condvar
-        while (_w_cur > 0)
+        while (_w_cur > 0) {
             _server_stop.wait(lock);
+        }
     }
 
     // Cleanup on exit...
@@ -273,14 +272,14 @@ void ServerImpl::Worker(int client_socket) {
     }
 
     // We are done with this connection
-    std::this_thread::sleep_for(std::chrono::microseconds(100)); // to avoid close before send issue
     close(client_socket);
 
     {
         std::lock_guard<std::mutex> lock(_w_mutex);
+        _client_sockets.erase(client_socket);
         _w_cur -= 1;
         if (_w_cur == 0)
-            _server_stop.notify_one();
+            _server_stop.notify_all();
     }
 }
 

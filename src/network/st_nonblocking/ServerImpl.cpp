@@ -5,7 +5,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
-
+ 
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -143,8 +143,6 @@ void ServerImpl::OnRun() {
 
             auto old_mask = pc->_event.events;
             if ((current_event.events & EPOLLERR) || (current_event.events & EPOLLHUP)) {
-                pc->DoRead();
-                pc->DoWrite();
                 pc->OnError();
             } else if (current_event.events & EPOLLRDHUP) {
                 pc->DoRead();

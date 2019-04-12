@@ -93,8 +93,6 @@ void Worker::OnRun() {
             // Some connection gets new data
             Connection *pconn = static_cast<Connection *>(current_event.data.ptr);
             if ((current_event.events & EPOLLERR) || (current_event.events & EPOLLHUP)) {
-                pconn->DoRead();
-                pconn->DoWrite();
                 pconn->OnError();
             } else if (current_event.events & EPOLLRDHUP) {
                 pconn->DoRead();

@@ -5,10 +5,6 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
-
-#include <chrono>
-#include <thread>
-
 #include <list>
 
 #include <arpa/inet.h>
@@ -19,16 +15,14 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/uio.h>
 
 #include <spdlog/logger.h>
-
 #include <afina/Storage.h>
 #include <afina/execute/Command.h>
 #include <afina/logging/Service.h>
-
 #include "protocol/Parser.h"
-
-#include <sys/ioctl.h>
 
 namespace Afina {
 namespace Network {
@@ -41,7 +35,7 @@ void Connection::Start() {
     _live = true;
     _event.data.fd = _socket;
     _event.data.ptr = this;
-    _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
+    _event.events = EVENT_READ;
 
     readed_bytes = 0;
     _write_offset = 0;
@@ -59,8 +53,6 @@ void Connection::OnError() {
     _live = false;
     shutdown(_socket, SHUT_RDWR);
     _logger->error("Error connection on descriptor {}", _socket);
-    // std::string err_message = "Error has happened\r\n"; // TODO send some info about error ?
-    // send(_socket, err_message.data(), err_message.size(), 0)
 }
 
 // See Connection.h
@@ -70,17 +62,12 @@ void Connection::OnClose() {
     _live = false;
     shutdown(_socket, SHUT_RDWR);
     _logger->debug("Closed connection on descriptor {}", _socket);
-    // std::string close_message = "Connection is closed\r\n"; // TODO send some info why connection closed ?
-    // send(_socket, close_message.data(), close_message.size(), 0);
 }
 
 // See Connection.h
 void Connection::DoRead() {
     _logger->info("DoRead on descriptor {}", _socket);
     std::lock_guard<std::mutex> lg{_mutex};
-
-    _event.events |= EPOLLOUT;
-    _event.data.ptr = this;
 
     try {
         int readed_bytes_ = -1;
@@ -139,6 +126,11 @@ void Connection::DoRead() {
 
                     _logger->debug("arguments {}", argument_for_command);
 
+                    if (_write_buffers.empty()) {
+                        _event.events = EVENT_READ_WRITE;
+                        _event.data.ptr = this;
+                    }
+
                     std::string result;
                     try {
                         command_to_execute->Execute(*pStorage, argument_for_command, result);
@@ -176,42 +168,42 @@ void Connection::DoWrite() {
     _logger->info("DoWrite on descriptor {}\n", _socket);
     std::lock_guard<std::mutex> lg{_mutex};
 
-    int available_space;
-    ioctl(_socket, FIONREAD, &available_space);
-
-    std::string result = _write_buffers.front();
-    _write_buffers.pop_front();
-    result.erase(0, _write_offset);
-    if (available_space > result.size()) {
-        if (send(_socket, result.data(), result.size(), 0) <= 0) {
-            throw std::runtime_error("Failed to send response");
-        }
-    } else {
-        _write_offset = available_space;
-        _write_buffers.push_front(result.substr(available_space, result.size()));
-        result.erase(result.size() - available_space, result.size());
-        if (send(_socket, result.data(), result.size(), 0) <= 0) {
-            throw std::runtime_error("Failed to send response");
-        }
+    int _write_buffers_size = _write_buffers.size();
+    if (_write_buffers_size == 0) { // nothing to write
+        return;
     }
 
-    while ((available_space > 0) && (!_write_buffers.empty())) {
-        result = _write_buffers.front();
+    struct iovec iov[_write_buffers_size];
+    {
+        auto it = _write_buffers.begin();
+        for (int i = 0; i < _write_buffers_size; ++i, ++it) {
+            iov[i].iov_base = const_cast<char *>(it->c_str());
+            iov[i].iov_len = it->size();
+        }
+    }
+    iov[0].iov_base = static_cast<char *>(iov[0].iov_base) + _write_offset;
+    iov[0].iov_len -= _write_offset;
+
+    int written_bytes = writev(_socket, iov, _write_buffers_size);
+
+    // some error happened during writing
+    if (written_bytes == -1) {
+        OnError();
+        return;
+    }
+
+    _write_offset = written_bytes;
+    int responses = 0;
+    while ((responses < _write_buffers_size) && (_write_offset >= iov[responses].iov_len)) {
+        _write_offset -= iov[responses].iov_len;
+        responses++;
+    }
+
+    for (int i = 0; i < responses; ++i) {
         _write_buffers.pop_front();
-        if (available_space > result.size()) {
-            if (send(_socket, result.data(), result.size(), 0) <= 0) {
-                throw std::runtime_error("Failed to send response");
-            }
-        } else {
-            _write_offset = available_space;
-            _write_buffers.push_front(result.substr(available_space, result.size()));
-            result.erase(result.size() - available_space, result.size());
-            if (send(_socket, result.data(), result.size(), 0) <= 0) {
-                throw std::runtime_error("Failed to send response");
-            }
-        }
     }
-    _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
+
+    _event.events = EVENT_READ;
 }
 
 } // namespace MTnonblock

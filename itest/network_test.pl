@@ -2,7 +2,7 @@
 use 5.016;
 use warnings;
 use threads;
-use Test::More tests => 85;
+use Test::More tests => 50;
 use IO::Socket::INET;
 use Getopt::Long;
 
@@ -88,3 +88,69 @@ sub afina_test {
 afina_test("set foo 0 0 6\r\nfoobar\r\n", "STORED\r\n", "Set command", 1);
 
 afina_test("get foo\r\n", "VALUE foo 0 6\r\nfoobar\r\nEND\r\n", "Get the value we just set", 0);
+
+afina_test(
+	"set foo 0 0 3\r\nwtf\r\n"
+	."set bar 0 0 3\r\nzzz\r\n"
+	."get foo bar\r\n",
+	"STORED\r\n"
+	."STORED\r\n"
+	."VALUE foo 0 3\r\nwtf\r\n"
+	."VALUE bar 0 3\r\nzzz\r\n"
+	."END\r\n",
+	"Multiple commands with body",
+	1
+);
+
+afina_test(
+	"add test 0 0 6\r\nfoobar\r\n",
+	"STORED\r\n",
+	"Add non-existent key",
+	1
+);
+
+afina_test(
+	"add test 0 0 6\r\nfoobar\r\n",
+	"NOT_STORED\r\n",
+	"Don't add existent key",
+	1
+);
+
+afina_test(
+	"append test_ 0 0 3\r\nwtf\r\n",
+	"NOT_STORED\r\n",
+	"Don't append non-existent key",
+	1
+);
+
+afina_test(
+	"append test 0 0 3\r\nwtf\r\n",
+	"STORED\r\n",
+	"Append an existent key",
+	1
+);
+
+afina_test(
+	"get test\r\n",
+	"VALUE test 0 9\r\nfoobarwtf\r\nEND\r\n",
+	"Verify the append",
+	0
+);
+
+afina_test(
+	sub {
+		my $socket = shift;
+		# make sure everything we write ends up before afina's eyes as we want it
+		$socket->autoflush(1);
+		print $socket "set foo 0 ";
+		sleep 1;
+		print $socket "0 3\r";
+		sleep 1;
+		print $socket "\nwtf\r\n";
+	},
+	"STORED\r\n",
+	"Must correctly handle partial writes",
+	1
+);
+
+afina_test("get foo\r\n", "VALUE foo 0 3\r\nwtf\r\nEND\r\n", "Correct result of partially written command",	0);

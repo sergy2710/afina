@@ -61,9 +61,9 @@ private:
 
     // Maximum number of bytes could be stored in this cache.
     // i.e all (keys+values) must be less the _max_size
-    std::size_t _max_size;
-    std::size_t _current_size = 0;
-    std::size_t _empty_size = _max_size; // extra but usefull variable
+    int _max_size;
+    int _current_size = 0;
+    int _empty_size = _max_size; // extra but usefull variable
 
     // Main storage of lru_nodes, elements in this list ordered descending by "freshness": in the head
     // element that wasn't used for longest time.
@@ -72,9 +72,8 @@ private:
     std::unique_ptr<lru_node> _lru_head{new lru_node()};
     lru_node *_lru_tail = _lru_head.get(); // quick access to tail;
 
-    typedef std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>,
-                     std::less<std::string>>
-        lru_map;
+    using lru_map =
+        std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>>;
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
     lru_map _lru_index;
@@ -83,7 +82,7 @@ private:
     bool ClearMemory(const std::size_t needed_size);
 
     // accurately recount size of _current_size and _empty_size
-    bool RecountCurrentSize(const std::size_t increment);
+    void RecountCurrentSize(const std::size_t increment);
 
     // delete node by key and insert new
     bool UpdateNode(const std::string &key, const std::string &value, const lru_map::iterator elem_it);
