@@ -28,12 +28,14 @@ namespace Afina {
 namespace Network {
 namespace MTnonblock {
 
+static constexpr int EVENT_READ = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLHUP | EPOLLET | EPOLLONESHOT;
+static constexpr int EVENT_READ_WRITE = EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLERR | EPOLLHUP | EPOLLET | EPOLLONESHOT;        
+
 // See Connection.h
 void Connection::Start() {
     _logger->info("Start on descriptor {}", _socket);
     std::lock_guard<std::mutex> lg{_mutex};
     _live = true;
-    _event.data.fd = _socket;
     _event.data.ptr = this;
     _event.events = EVENT_READ;
 
@@ -126,16 +128,16 @@ void Connection::DoRead() {
 
                     _logger->debug("arguments {}", argument_for_command);
 
-                    if (_write_buffers.empty()) {
-                        _event.events = EVENT_READ_WRITE;
-                        _event.data.ptr = this;
-                    }
+                    
 
                     std::string result;
                     try {
                         command_to_execute->Execute(*pStorage, argument_for_command, result);
                         result += "\r\n";
                         _write_buffers.push_back(result);
+                        if (_write_buffers.size() == 1) {
+                            _event.events = EVENT_READ_WRITE;
+                        }
                     } catch (std::runtime_error &ex) {
                         _logger->error("Failed to Execute {}", ex.what());
                         result = "SERVER_ERROR " + std::string(ex.what()) + "\r\n";
@@ -170,6 +172,7 @@ void Connection::DoWrite() {
 
     int _write_buffers_size = _write_buffers.size();
     if (_write_buffers_size == 0) { // nothing to write
+        _event.events = EVENT_READ;
         return;
     }
 
@@ -192,18 +195,17 @@ void Connection::DoWrite() {
         return;
     }
 
-    _write_offset = written_bytes;
+    _write_offset += written_bytes;
     int responses = 0;
     while ((responses < _write_buffers_size) && (_write_offset >= iov[responses].iov_len)) {
         _write_offset -= iov[responses].iov_len;
+        _write_buffers.pop_front();
         responses++;
     }
 
-    for (int i = 0; i < responses; ++i) {
-        _write_buffers.pop_front();
+    if (_write_buffers.empty()) {
+        _event.events = EVENT_READ;
     }
-
-    _event.events = EVENT_READ;
 }
 
 } // namespace MTnonblock

@@ -38,9 +38,6 @@ protected:
 private:
     friend class ServerImpl;
 
-    static constexpr int EVENT_READ = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLHUP | EPOLLET;
-    static constexpr int EVENT_READ_WRITE = EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLERR | EPOLLHUP | EPOLLET;
-
     int _socket;
     struct epoll_event _event;
 
