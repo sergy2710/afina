@@ -86,8 +86,11 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
 void ServerImpl::Stop() {
     running.store(false);
     shutdown(_server_socket, SHUT_RDWR);
-    for (auto cl_socket : _client_sockets) {
-        shutdown(cl_socket, SHUT_RDWR);
+    {
+        std::lock_guard<std::mutex> lock(_w_mutex);
+        for (auto cl_socket : _client_sockets) {
+            shutdown(cl_socket, SHUT_RDWR);
+        }
     }
 }
 
@@ -279,7 +282,7 @@ void ServerImpl::Worker(int client_socket) {
         _client_sockets.erase(client_socket);
         _w_cur -= 1;
         if (_w_cur == 0)
-            _server_stop.notify_all();
+            _server_stop.notify_one();
     }
 }
 
