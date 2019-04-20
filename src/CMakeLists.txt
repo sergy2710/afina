@@ -4,7 +4,6 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 
 add_subdirectory(allocator)
 add_subdirectory(concurrency)
-add_subdirectory(coroutine)
 add_subdirectory(logging)
 add_subdirectory(execute)
 add_subdirectory(protocol)

@@ -170,37 +170,48 @@ void Connection::DoWrite() {
     _logger->info("DoWrite on descriptor {}\n", _socket);
     std::lock_guard<std::mutex> lg{_mutex};
 
-    int _write_buffers_size = _write_buffers.size();
-    if (_write_buffers_size == 0) { // nothing to write
+    if (_write_buffers.empty()) { // nothing to write - better to check this way for safety
         _event.events = EVENT_READ;
         return;
     }
 
-    struct iovec iov[_write_buffers_size];
-    {
-        auto it = _write_buffers.begin();
-        for (int i = 0; i < _write_buffers_size; ++i, ++it) {
-            iov[i].iov_base = const_cast<char *>(it->c_str());
-            iov[i].iov_len = it->size();
+    const int max_size = 64;
+    int written_bytes = 1;
+       
+    while ((written_bytes > 0) && (!_write_buffers.empty())){
+  
+        int cur_size = std::min(static_cast<int>(_write_buffers.size()), max_size);
+
+        struct iovec iov[cur_size];
+        {
+            auto it = _write_buffers.begin();
+            for (int i = 0; i < cur_size; ++i, ++it) {
+                iov[i].iov_base = const_cast<char *>(it->c_str());
+                iov[i].iov_len = it->size();
+            }
         }
-    }
-    iov[0].iov_base = static_cast<char *>(iov[0].iov_base) + _write_offset;
-    iov[0].iov_len -= _write_offset;
+        iov[0].iov_base = static_cast<char *>(iov[0].iov_base) + _write_offset;
+        iov[0].iov_len -= _write_offset;
 
-    int written_bytes = writev(_socket, iov, _write_buffers_size);
+        written_bytes = writev(_socket, iov, cur_size);
 
-    // some error happened during writing
-    if (written_bytes == -1) {
-        OnError();
-        return;
-    }
+        // some error happened during writing
+        if (written_bytes == -1) {
+            OnError();
+            return;
+        }
 
-    _write_offset += written_bytes;
-    int responses = 0;
-    while ((responses < _write_buffers_size) && (_write_offset >= iov[responses].iov_len)) {
-        _write_offset -= iov[responses].iov_len;
-        _write_buffers.pop_front();
-        responses++;
+        auto it_delete_end = _write_buffers.begin();
+        if (written_bytes > 0){
+            _write_offset += written_bytes;
+            int responses = 0;
+            while ((responses < cur_size) && (_write_offset >= iov[responses].iov_len)) {
+                _write_offset -= iov[responses].iov_len;
+                it_delete_end++;
+                responses++;
+            }
+        }
+        _write_buffers.erase(_write_buffers.begin(), it_delete_end);
     }
 
     if (_write_buffers.empty()) {
