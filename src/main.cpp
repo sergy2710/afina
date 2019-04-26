@@ -23,6 +23,8 @@
 #include "storage/SimpleLRU.h"
 #include "storage/ThreadSafeSimpleLRU.h"
 
+#include "network/coroutine/ServerImpl.h"
+
 using namespace Afina;
 
 /**
@@ -71,7 +73,9 @@ public:
         } else if (network_type == "st_nonblock") {
             server = std::make_shared<Afina::Network::STnonblock::ServerImpl>(storage, logService);
         } else if (network_type == "mt_nonblock") {
-            server = std::make_shared<Afina::Network::MTnonblock::ServerImpl>(storage, logService);  
+            server = std::make_shared<Afina::Network::MTnonblock::ServerImpl>(storage, logService);
+        } else if (network_type == "coroutine") {
+            server = std::make_shared<Afina::Network::Coroutine::ServerImpl>(storage, logService);        
         } else {
             throw std::runtime_error("Unknown network type");
         }
